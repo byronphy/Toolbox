@@ -3,8 +3,8 @@ close all;clear;clc
 %% 导入数据和参数
 FIDfile = ['D:\Data\哈医大多核20231023\'];
 fileList = [14111];
-%FIDfile = ['D:\Data\哈医大多核20231023\兔肝成像1\'];
-%fileList = [19034:19043];
+% FIDfile = ['D:\Data\哈医大多核20231023\兔肝成像3\'];
+% fileList = [18918:18928];
 % fileList = [19085:19093];
 avg =20;%10  
 mreadP = 256;%FIDpiont3
@@ -67,10 +67,9 @@ end
 FID = FID/avg/length(fileList)/(mreadP*(1+padfactor))*1000;
 FID = squeeze(FID); % 256x16x16x4
 
-%% k空间填零
+%% k空间填零，根据H和P的gamma来在k空间中继续填零
 FID_kspace = padarray(FID,[0 (imgSize-X)/2 (imgSize-Y)/2 0],0,'both'); % 图像空间XY两侧填零,256x32x32x4
 
-%% 根据H和P的gamma来在k空间中继续填零
 gamma = [42.576,40.053,11.262,17.235];% H F Na P
 if isAdjustP ==1
     n = round(gamma(1)/gamma(4)*imgSize);
@@ -95,11 +94,11 @@ FID_rspace_zerofill = cat(1,FID_rspace,zeros(round(padfactor*mreadP),imgSize,img
 N = size(FID_rspace_zerofill,1);
 time_range = linspace(0,N/BW_P*1000,N);
 
-%% 对FID做FFT得到波谱
+%% 对所有FID做FFT得到波谱
 spec = fftshift(fft(FID_rspace_zerofill,[],1),1); % 512x32x32x4
 spec_sos = sqrt(sum(abs(spec).^2, 4)); % 四个通道模平方和的开方,512x32x32
 
-%% 对31P幅度谱值求和，找最大的位置
+%% 对31P幅度谱值求和，找最大的位置，并对附近的体素都进行频谱平移校正
 img_all_peak = squeeze(sum(spec_sos, 1));
 [img_MIP, index] = max(spec_sos,[],1);
 img_MIP = squeeze(img_MIP); index = squeeze(index);
@@ -111,11 +110,15 @@ img_all_peak = img_all_peak/max(abs(img_all_peak(:)));
 img_MIP = img_MIP/max(abs(img_MIP(:)));
 
 % 选择图像空间的某一个体素
-[~,tmpidx] = max(img_MIP(:));
-X_loc = ceil(tmpidx/imgSize);
-Y_loc = tmpidx-(X_loc-1)*imgSize;
-%X_loc = 18;
-%Y_loc = 8;
+[~,tmpidx] = sort(img_MIP(:),'descend');
+% Y_loc = ceil(tmpidx(1)/imgSize);
+% X_loc = tmpidx(1)-(Y_loc-1)*imgSize;
+
+X_loc = ceil(tmpidx(1)/imgSize);
+Y_loc = tmpidx(1)-(X_loc-1)*imgSize;
+
+%X_loc = 21;
+%Y_loc = 27;
 
 figure(1); 
 subplot(131),imshow(img_all_peak,[]); title('all spectrum'); hold on, plot(X_loc,Y_loc,'or', 'MarkerSize',5, 'MarkerFaceColor', 'r');
@@ -135,41 +138,68 @@ xlabel('Time (ms)');ylabel('Signal');title('FID (zerofilled)');
 % FID_rspace_apd = mrs_apod(FID_rspace_zerofill, 5000, 5);
 % FID_rspace_zerofill = mrs_apod(FID_rspace_zerofill, 5000, 5);
 
-%% 画出波谱
-ppm_range = linspace(BW_P/2,-BW_P/2,N)/freq_ref_P;
-begin_ppm = 25;
-end_ppm = -25;
-begin_index = round(-begin_ppm *N*freq_ref_P/BW_P+N/2);
-end_index = round(-end_ppm *N*freq_ref_P/BW_P+N/2);
+%% 对波谱所有频谱校正(不宜过大，保证是磷谱才行)
+% 先从最大值的几个体素的频移程度估计整体频移
+voxel_num = 10;
+shift_values = zeros(voxel_num,1);
+for n = 1:voxel_num
+    voxel_y = ceil(tmpidx(n)/imgSize);
+    voxel_x = tmpidx(n)-(voxel_y-1)*imgSize;
+    spec_sos_voxel = spec_sos(:,voxel_x,voxel_y);
+    spec_sos_voxel = smooth(spec_sos_voxel,8,'lowess'); % 平滑幅度谱，窗宽8
+    [~,Idx] = sort(spec_sos_voxel,'descend'); % 降序排列波谱，幅值最大的为中心频率
+    shift_values(n) = round(N/2)-Idx(1)+1; % 对第n个体素进行频移校正：移动距离为shift_values(i),10
+    % tmp_ =circshift(spec_sos_voxel,shift_values(n));
+end
+shift_value = round(mean(shift_values));
 
-spec_c1 = spec(:,:,:,1); % 第1个通道
-spec_loc_c1 = spec(:,X_loc,Y_loc,1); % 第1个通道，图像某体素的波谱
+
+%% 画出波谱
+% ppm_range = linspace(BW_P/2,-BW_P/2,N)/freq_ref_P;
+% begin_ppm = 25;
+% end_ppm = -25;
+% begin_index = round(-begin_ppm *N*freq_ref_P/BW_P+N/2);
+% end_index = round(-end_ppm *N*freq_ref_P/BW_P+N/2);
+
+ppm_range = linspace(-BW_P/2,BW_P/2,N)/freq_ref_P;
+begin_ppm = -round(max(ppm_range));
+end_ppm = round(max(ppm_range));
+begin_index = round(begin_ppm *N*freq_ref_P/BW_P+N/2);
+end_index = round(end_ppm *N*freq_ref_P/BW_P+N/2);
+
+spec_loc = spec(:,X_loc,Y_loc,:); % 图像某体素的波谱，包括4个通道 512x4
 
 figure(3);
-plot(ppm_range(begin_index:end_index), real(spec_loc_c1(begin_index:end_index)),'b', 'LineWidth', 2);hold on;
-plot(ppm_range(begin_index:end_index), imag(spec_loc_c1(begin_index:end_index)),'r', 'LineWidth', 2);hold off;
-legend('Real', 'Imaginary');set(gca,'XDir','reverse');
-xlabel('ppm');ylabel('Signal');title('Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz of Channel 1');
+subplot(2,2,1);
+plot(ppm_range(begin_index:end_index), real(spec_loc(begin_index:end_index,1)),'b', 'LineWidth', 2); % 画第一个通道
+legend('Real');set(gca,'XDir','reverse');xlabel('ppm');ylabel('Signal');
+title('Real Spectrum of ^{31}P, f_{ref}=51.8959 MHz (Channel 1)');
+subplot(2,2,2);
+plot(ppm_range(begin_index:end_index), imag(spec_loc(begin_index:end_index,1)),'r', 'LineWidth', 2);% 画第一个通道 
+legend('Imaginary');set(gca,'XDir','reverse');xlabel('ppm');ylabel('Signal');
+title('Imaginary Spectrum of ^{31}P, f_{ref}=51.8959 MHz (Channel 1)');
+subplot(2,2,3);
+plot(ppm_range(begin_index:end_index), abs(spec_loc(begin_index:end_index,1)),'b', 'LineWidth', 2);
+legend('Magnitude');set(gca,'XDir','reverse');xlabel('ppm');ylabel('Signal');
+title('Magnitude Spectrum of ^{31}P, f_{ref}=51.8959 MHz (Channel 1)');
+subplot(2,2,4);
+plot(ppm_range(begin_index:end_index), angle(spec_loc(begin_index:end_index,1)),'r', 'LineWidth', 2);
+legend('Phase');set(gca,'XDir','reverse');xlabel('ppm');ylabel('Phase (rad)');
+title('Phase Spectrum of ^{31}P, f_{ref}=51.8959 MHz (Channel 1)');
 
-figure(4);
-plot(ppm_range(begin_index:end_index), abs(spec_loc_c1(begin_index:end_index)),'b', 'LineWidth', 2);hold on;
-plot(ppm_range(begin_index:end_index), angle(spec_loc_c1(begin_index:end_index)),'r', 'LineWidth', 2);hold off;
-legend('Magnitude','Angle');set(gca,'XDir','reverse');
-xlabel('ppm');ylabel('Signal');title('Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz of Channel 1');
-
-%% 四通道几何平均
-spec_sos = sqrt(sum(abs(spec).^2, 4)); % 四个通道模平方和的开方,512x32x32
-spec_loc_sos = spec_sos(:,X_loc,Y_loc); % 图像某体素的波谱
+% 四通道几何平均
+spec_sos = spec_shift(spec_sos,shift_value);
+spec_loc_sos = spec_sos(:,X_loc,Y_loc); % 图像某体素的波谱 512
 %spec_loc_sos = smooth(spec_loc_sos,8,'lowess'); % 平滑处理，窗宽8
 
-figure(5);
+figure(4);
 plot(ppm_range(begin_index:end_index), spec_loc_sos(begin_index:end_index),'b', 'LineWidth', 2);
 legend('Magnitude');set(gca,'XDir','reverse');
-xlabel('ppm');ylabel('Signal');title('Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz');
+xlabel('ppm');ylabel('Signal');title('Spectrum of ^{31}P, f_{ref}=51.8959 MHz (Combined Channel)');
 
 %% 自动零阶相位校正(四个通道)
-ppm_pc_range = [20,-20];
-index_pc_range = round(-ppm_pc_range *N*freq_ref_P/BW_P+N/2);
+ppm_pc_range = [-20,20];
+index_pc_range = round(ppm_pc_range *N*freq_ref_P/BW_P+N/2);
 
 deg_step = 1; % deg
 phs_range = (-180:deg_step:180)/180*pi;
@@ -194,33 +224,37 @@ for channel = 1:size(spec,4)
 end
 size(spec_pc)
 
-%% 零阶相位校正后
-spec_pc_loc = spec_pc(:,X_loc,Y_loc,1); % 第1个通道，图像中心的波谱
-figure(6);
-plot(ppm_range(begin_index:end_index), real(spec_pc_loc(begin_index:end_index)),'b', 'LineWidth', 2);hold on;
-plot(ppm_range(begin_index:end_index), imag(spec_pc_loc(begin_index:end_index)),'r', 'LineWidth', 2);hold off;
-legend('Real', 'Imaginary');set(gca,'XDir','reverse');
-xlabel('ppm');ylabel('Signal');title('0th Phase Corrected Spectrum of Channel 1');
-
-% 幅值/相位
-figure(7);
-plot(ppm_range(begin_index:end_index), abs(spec_pc_loc(begin_index:end_index)),'b', 'LineWidth', 2);hold on;
-plot(ppm_range(begin_index:end_index), angle(spec_pc_loc(begin_index:end_index)),'r', 'LineWidth', 2);hold off;
-legend('Magnitude','Angle');set(gca,'XDir','reverse');
-xlabel('ppm');ylabel('Signal');title('0th Phase Corrected Spectrum of Channel 1');
+% 零阶相位校正后
+spec_pc_loc = spec_pc(:,X_loc,Y_loc,:); % 图像某体素的波谱
+figure(5);
+subplot(2,2,1);
+plot(ppm_range(begin_index:end_index), real(spec_pc_loc(begin_index:end_index,1)),'b', 'LineWidth', 2);
+legend('Real');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('0th Phase Corrected Real Spectrum (Channel 1)');
+subplot(2,2,2);
+plot(ppm_range(begin_index:end_index), imag(spec_pc_loc(begin_index:end_index,1)),'r', 'LineWidth', 2);
+legend('Imaginary');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('0th Phase Corrected Imaginary Spectrum (Channel 1)');
+subplot(2,2,3);
+plot(ppm_range(begin_index:end_index), abs(spec_pc_loc(begin_index:end_index,1)),'b', 'LineWidth', 2);
+legend('Magnitude');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('0th Phase Corrected Magnitude Spectrum (Channel 1)');
+subplot(2,2,4);
+plot(ppm_range(begin_index:end_index), angle(spec_pc_loc(begin_index:end_index,1)),'r', 'LineWidth', 2);
+legend('Phase');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Phase (rad)');title('0th Phase Corrected Imaginary Spectrum (Channel 1)');
 
 % 四通道平均
-spec_pc_sos = sqrt(sum(abs(spec_pc).^2, 4)); % 四个通道模平方和的开方
-size(spec_pc_sos)
+spec_pc_sos = sqrt(sum(abs(spec_pc).^2, 4)); % 四个通道模平方和的开方,512x32x32
+spec_pc_sos = spec_shift(spec_pc_sos,shift_value);
 spec_pc_loc_sos = spec_pc_sos(:,X_loc,Y_loc); % 图像某体素的波谱
 %spec_pc_loc_sos = smooth(spec_pc_loc_sos,8,'lowess'); % 平滑处理，窗宽8
-figure(8);
-plot(ppm_range(begin_index:end_index), abs(spec_pc_loc_sos(begin_index:end_index)),'b', 'LineWidth', 2);
+figure(6);
+plot(ppm_range(begin_index:end_index), spec_pc_loc_sos(begin_index:end_index),'b', 'LineWidth', 2);
 legend('Magnitude');set(gca,'XDir','reverse');
-xlabel('ppm');ylabel('Signal');title('0th Phase Corrected Spectrum');
+xlabel('ppm');ylabel('Signal');title('0th Phase Corrected Magnitude Spectrum (Combined Channel)');
 
-%% 对特定位置体素的波谱作一阶相位校正
-spec_loc = spec(:,X_loc,Y_loc,:);
+%% 对特定位置体素的波谱作一阶相位校正(全部体素都做的话时间太长了)
 spec_loc_1pc = zeros(N,size(spec,4));
 options=optimset('TolX',1e-8,'MaxFunEvals',1e8, 'MaxIter',1e8);
 for channel = 1:size(spec,4)
@@ -230,29 +264,35 @@ for channel = 1:size(spec,4)
     ph=(phc0+phc1.*(1:N)/N);
     spec_loc_1pc(:,channel)=mrs_rephase(spec_loc(:,channel), ph');
 end
-        
-figure(9);
-plot(ppm_range(begin_index:end_index), real(spec_loc_1pc(begin_index:end_index,1)),'b', 'LineWidth', 2);hold on;
-plot(ppm_range(begin_index:end_index), imag(spec_loc_1pc(begin_index:end_index,1)),'r', 'LineWidth', 2);hold off;
-legend('Real', 'Imaginary');set(gca,'XDir','reverse');
-xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Spectrum of Channel 1');
 
-% 幅值相位
-figure(10);
-plot(ppm_range(begin_index:end_index), abs(spec_loc_1pc(begin_index:end_index,1)),'b', 'LineWidth', 2);hold on;
-plot(ppm_range(begin_index:end_index), angle(spec_loc_1pc(begin_index:end_index,1)),'r', 'LineWidth', 2);hold off;
-legend('Magnitude','Angle');set(gca,'XDir','reverse');
-xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Spectrum of Channel 1');
+figure(7);
+subplot(2,2,1);
+plot(ppm_range(begin_index:end_index), real(spec_loc_1pc(begin_index:end_index,1)),'b', 'LineWidth', 2);
+legend('Real');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Real Spectrum (Channel 1)');
+subplot(2,2,2);
+plot(ppm_range(begin_index:end_index), imag(spec_loc_1pc(begin_index:end_index,1)),'r', 'LineWidth', 2);
+legend('Real', 'Imaginary');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Imaginary Spectrum (Channel 1)');
+subplot(2,2,3);
+plot(ppm_range(begin_index:end_index), abs(spec_loc_1pc(begin_index:end_index,1)),'b', 'LineWidth', 2);
+legend('Magnitude');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Magnitude Spectrum (Channel 1)');
+subplot(2,2,4);
+plot(ppm_range(begin_index:end_index), angle(spec_loc_1pc(begin_index:end_index,1)),'r', 'LineWidth', 2);
+legend('Phase');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Phase Spectrum (Channel 1)');
 
 % 四通道平均
 spec_loc_1pc_sos = sqrt(sum(abs(spec_loc_1pc).^2, 2)); % 图像中心的波谱
+spec_loc_1pc_sos = spec_shift(spec_loc_1pc_sos,shift_value);
 spec_loc_1pc_sos = smooth(spec_loc_1pc_sos,8,'lowess'); % 平滑处理，窗宽8
-figure(11);
-plot(ppm_range(begin_index:end_index), abs(spec_loc_1pc_sos(begin_index:end_index)),'b', 'LineWidth', 2);
+figure(8);
+plot(ppm_range(begin_index:end_index), spec_loc_1pc_sos(begin_index:end_index),'b', 'LineWidth', 2);
 legend('Magnitude');set(gca,'XDir','reverse');
-xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Spectrum');
+xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Magnitude Spectrum (Combined Channel)');
 
-%% 基线校正，多项式函数效果不太好，似乎并不需要校正（原因是太多峰了）
+%% 基线校正，多项式函数效果不太好，似乎并不需要校正（原因是太多峰了，实际上可能是振铃伪影）
 % y = spec_loc_1pc_sos;
 % degree = 3;  % 三次多项式
 % coeff = polyfit(ppm_range, y, degree);
@@ -284,23 +324,23 @@ xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Spectrum');
 %% 分峰拟合
 spectrum = spec_loc_1pc_sos;
 % PCr
-PCr_ppm_range = [1,-1.79]; % [3,-3]
+PCr_ppm_range = [-0.8,2.7]; % [-3,3]
 [PCr_fitted, PCr_pars] = FitLorentzPeak(spectrum,PCr_ppm_range);
 
 % Pi
-Pi_ppm_range = [5.62,3.28]; % [5.62,3.28]
+Pi_ppm_range = [3.28,5.62]; % [3.28,5.62]
 [Pi_fitted, Pi_pars] = FitLorentzPeak(spectrum,Pi_ppm_range);
 
 % alphaATP
-alphaATP_ppm_range = [-7.1,-8.7]; % [-6,-9]
+alphaATP_ppm_range = [-9,-6]; % [-6,-9]
 [alphaATP_fitted, alphaATP_pars] = FitLorentzPeak(spectrum,alphaATP_ppm_range);
 
 % betaATP
-betaATP_ppm_range = [-14.5,-17.5]; % [-14.5,-17.5]
+betaATP_ppm_range = [-17.5,-14.5]; % [-17.5,-14.5]
 [betaATP_fitted, betaATP_pars] = FitLorentzPeak(spectrum,betaATP_ppm_range);
 
 % gammaATP
-gammaATP_ppm_range = [-1.9,-5.5]; % [-2,-5]
+gammaATP_ppm_range = [-5,-2]; % [-5,-2]
 [gammaATP_fitted, gammaATP_pars] = FitLorentzPeak(spectrum,gammaATP_ppm_range);
 
 figure(13);
@@ -314,14 +354,23 @@ legend('Magnitude','PCr','Pi','alphaATP','betaATP','gammaATP');set(gca,'XDir','r
 xlabel('ppm');ylabel('Signal');title('Individual Peak Fitted');
 
 
+%% 计算化学物质峰面积 S=A*FWHM
+        % y0 = baseline amplitude
+        % x0 = location of the peak 
+        % fwhm = full width at half maximum
+        % A = height of the peak 
+PCr_Area = (PCr_pars(4)-PCr_pars(1))*PCr_pars(3);
 
-
-
-
-
-
-
-
+%% 对sos幅度谱的频率轴平移校正
+function spec_sos_shifted = spec_shift(spec_sos,shift_value)
+    spec_sos_shifted = zeros(size(spec_sos,1),size(spec_sos,2),size(spec_sos,3));
+    for voxel_y = 1:size(spec_sos,3)
+        for voxel_x = 1:size(spec_sos,2)
+            spec_sos_voxel = spec_sos(:,voxel_x,voxel_y);
+            spec_sos_shifted(:,voxel_x,voxel_y) = circshift(spec_sos_voxel,shift_value);
+        end
+    end
+end
 
 %% 一阶相位校正部分的函数
 function f = mrs_entropy(x,spectrum)
@@ -389,7 +438,7 @@ function [y_fitted, pars_fitted] = FitLorentzPeak(spectrum, ppm_range)
         % A = height of the peak 
     N = length(spectrum);
     freq_ref_P = 51.8959; BW_P = 5000;
-    index_range = round(-ppm_range *N*freq_ref_P/BW_P+N/2);
+    index_range = round(ppm_range *N*freq_ref_P/BW_P+N/2);
     x = index_range(1):index_range(2);
     data = spectrum(x);
     [A_ini,index] = max(data);
@@ -397,3 +446,16 @@ function [y_fitted, pars_fitted] = FitLorentzPeak(spectrum, ppm_range)
     [f, pars_fitted] = mrs_lorentzFit(par_initials, data, x');
     y_fitted = mrs_lorentzFun(1:N, pars_fitted(1), pars_fitted(2), pars_fitted(3), pars_fitted(4));
 end
+
+% %% 求面积函数
+% function area = cal_Area(pars)
+%     baseline = pars(1);
+%     peak_loc = pars(2);
+%     FWHM = pars(3);
+%     peak_hight = pars(4);
+%     if baseline < 0
+%         area = peak_hight*FWHM;
+%     else
+%         area = (peak_hight-baseline)
+% 
+% end
