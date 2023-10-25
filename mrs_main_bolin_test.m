@@ -134,7 +134,8 @@ xlabel('Time (ms)');ylabel('Signal');title('FID (zerofilled)');
 %% Apodization，消除填零导致的振铃伪影
 % FID_rspace_apd = mrs_apod(FID_rspace_zerofill, 5000, 5);
 % FID_rspace_zerofill = mrs_apod(FID_rspace_zerofill, 5000, 5);
-%%
+
+%% 画出波谱
 ppm_range = linspace(BW_P/2,-BW_P/2,N)/freq_ref_P;
 begin_ppm = 25;
 end_ppm = -25;
@@ -147,26 +148,26 @@ spec_loc_c1 = spec(:,X_loc,Y_loc,1); % 第1个通道，图像某体素的波谱
 figure(3);
 plot(ppm_range(begin_index:end_index), real(spec_loc_c1(begin_index:end_index)),'b', 'LineWidth', 2);hold on;
 plot(ppm_range(begin_index:end_index), imag(spec_loc_c1(begin_index:end_index)),'r', 'LineWidth', 2);hold off;
-legend('Real', 'Imaginary');
-xlabel('ppm');ylabel('Signal');title('Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz @ Channel 1');
+legend('Real', 'Imaginary');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz of Channel 1');
 
 figure(4);
 plot(ppm_range(begin_index:end_index), abs(spec_loc_c1(begin_index:end_index)),'b', 'LineWidth', 2);hold on;
 plot(ppm_range(begin_index:end_index), angle(spec_loc_c1(begin_index:end_index)),'r', 'LineWidth', 2);hold off;
-legend('Magnitude','Angle');
-xlabel('ppm');ylabel('Signal');title('Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz @ Channel 1');
+legend('Magnitude','Angle');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz of Channel 1');
 
 %% 四通道几何平均
 spec_sos = sqrt(sum(abs(spec).^2, 4)); % 四个通道模平方和的开方,512x32x32
 spec_loc_sos = spec_sos(:,X_loc,Y_loc); % 图像某体素的波谱
-spec_loc_sos = smooth(spec_loc_sos,8,'lowess'); % 平滑处理，窗宽8
+%spec_loc_sos = smooth(spec_loc_sos,8,'lowess'); % 平滑处理，窗宽8
 
 figure(5);
 plot(ppm_range(begin_index:end_index), spec_loc_sos(begin_index:end_index),'b', 'LineWidth', 2);
-legend('Magnitude');
+legend('Magnitude');set(gca,'XDir','reverse');
 xlabel('ppm');ylabel('Signal');title('Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz');
 
-%% 自动零阶相位校正
+%% 自动零阶相位校正(四个通道)
 ppm_pc_range = [20,-20];
 index_pc_range = round(-ppm_pc_range *N*freq_ref_P/BW_P+N/2);
 
@@ -186,91 +187,131 @@ for channel = 1:size(spec,4)
             end
             [~,op_index] = max(phs_corr);
             op_phs = phs_range(op_index); 
-            spec_pc(:,i,j,channel) = mrs_rephase(spec(:,i,j,channel), op_phs);
+            spec_pc(:,i,j,channel) = mrs_rephase(spec(:,i,j,channel), op_phs); % 512x32x32x4
             %spec_pc(:,i,j)=mrs_zeroPHC(spec(:,i,j));
         end
     end
 end
 size(spec_pc)
 
-%% 对第一通道c1零阶相位校正后
+%% 零阶相位校正后
 spec_pc_loc = spec_pc(:,X_loc,Y_loc,1); % 第1个通道，图像中心的波谱
 figure(6);
 plot(ppm_range(begin_index:end_index), real(spec_pc_loc(begin_index:end_index)),'b', 'LineWidth', 2);hold on;
 plot(ppm_range(begin_index:end_index), imag(spec_pc_loc(begin_index:end_index)),'r', 'LineWidth', 2);hold off;
-legend('Real', 'Imaginary');
-xlabel('ppm');ylabel('Signal');title('0th Phase Corrected Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz @ Channel 1');
+legend('Real', 'Imaginary');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('0th Phase Corrected Spectrum of Channel 1');
 
-% 幅值相位
+% 幅值/相位
 figure(7);
 plot(ppm_range(begin_index:end_index), abs(spec_pc_loc(begin_index:end_index)),'b', 'LineWidth', 2);hold on;
 plot(ppm_range(begin_index:end_index), angle(spec_pc_loc(begin_index:end_index)),'r', 'LineWidth', 2);hold off;
-legend('Magnitude','Angle');
-xlabel('ppm');ylabel('Signal');title('0th Phase Corrected Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz @ Channel 1');
+legend('Magnitude','Angle');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('0th Phase Corrected Spectrum of Channel 1');
 
 % 四通道平均
 spec_pc_sos = sqrt(sum(abs(spec_pc).^2, 4)); % 四个通道模平方和的开方
 size(spec_pc_sos)
 spec_pc_loc_sos = spec_pc_sos(:,X_loc,Y_loc); % 图像某体素的波谱
-spec_pc_loc_sos = smooth(spec_pc_loc_sos,8,'lowess'); % 平滑处理，窗宽8
+%spec_pc_loc_sos = smooth(spec_pc_loc_sos,8,'lowess'); % 平滑处理，窗宽8
 figure(8);
 plot(ppm_range(begin_index:end_index), abs(spec_pc_loc_sos(begin_index:end_index)),'b', 'LineWidth', 2);
-legend('Magnitude');
-xlabel('ppm');ylabel('Signal');title('Phase Corrected Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz');
+legend('Magnitude');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('0th Phase Corrected Spectrum');
 
-%% test
-for j = 1
-    for i = 1
-        testmat=mrs_firstPHC(spec_c1(:,i,j));
-    end
+%% 对特定位置体素的波谱作一阶相位校正
+spec_loc = spec(:,X_loc,Y_loc,:);
+spec_loc_1pc = zeros(N,size(spec,4));
+options=optimset('TolX',1e-8,'MaxFunEvals',1e8, 'MaxIter',1e8);
+for channel = 1:size(spec,4)
+    phc=fminsearch(@(x) mrs_entropy(x,spec_loc(:,channel)), [0 0], options);
+    phc0 = phc(1);
+    phc1 = phc(2);
+    ph=(phc0+phc1.*(1:N)/N);
+    spec_loc_1pc(:,channel)=mrs_rephase(spec_loc(:,channel), ph');
 end
-size(testmat)
+        
+figure(9);
+plot(ppm_range(begin_index:end_index), real(spec_loc_1pc(begin_index:end_index,1)),'b', 'LineWidth', 2);hold on;
+plot(ppm_range(begin_index:end_index), imag(spec_loc_1pc(begin_index:end_index,1)),'r', 'LineWidth', 2);hold off;
+legend('Real', 'Imaginary');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Spectrum of Channel 1');
 
-%% 一阶相位校正
-% spec_1pc = zeros(N,imgSize,imgSize);
-% options=optimset('TolX',1e-8,'MaxFunEvals',1e8, 'MaxIter',1e8);
-% for j = 1:size(spec_c1,3)
-%     for i = 1:size(spec_c1,2)
-%         phc=fminsearch(@(x) mrs_entropy(x, spec_c1(:,i,j)), [0 0], options);
-%         phc0 = phc(1);
-%         phc1 = phc(2);
-%         ph=(phc0+phc1.*(1:N)/N);
-%         spec_1pc(:,i,j)=mrs_rephase(spec_c1(:,i,j), ph');
-%     end
-% end
+% 幅值相位
+figure(10);
+plot(ppm_range(begin_index:end_index), abs(spec_loc_1pc(begin_index:end_index,1)),'b', 'LineWidth', 2);hold on;
+plot(ppm_range(begin_index:end_index), angle(spec_loc_1pc(begin_index:end_index,1)),'r', 'LineWidth', 2);hold off;
+legend('Magnitude','Angle');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Spectrum of Channel 1');
 
-% %% 对第一通道c1零阶相位校正后
-% %spec_1pc_loc = spec_1pc(:,imgSize/2+1,imgSize/2+1,1); % 第1个通道，图像中心的波谱
-% options=optimset('TolX',1e-8,'MaxFunEvals',1e8, 'MaxIter',1e8);
-% phc=fminsearch(@(x) mrs_entropy(x, spec_c1(:,X_loc,Y_loc)), [0 0], options);
-% phc0 = phc(1);
-% phc1 = phc(2);
-% ph=(phc0+(1:N)/N.*phc1);
-% spec_1pc_loc = mrs_rephase(spec_c1(:,X_loc,Y_loc), ph);
-%         
-% figure(9);
-% plot(ppm_range(begin_index:end_index), real(spec_1pc_loc(begin_index:end_index)),'b', 'LineWidth', 2);hold on;
-% plot(ppm_range(begin_index:end_index), imag(spec_1pc_loc(begin_index:end_index)),'r', 'LineWidth', 2);hold off;
-% legend('Real', 'Imaginary');
-% xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz @ Channel 1');
+% 四通道平均
+spec_loc_1pc_sos = sqrt(sum(abs(spec_loc_1pc).^2, 2)); % 图像中心的波谱
+spec_loc_1pc_sos = smooth(spec_loc_1pc_sos,8,'lowess'); % 平滑处理，窗宽8
+figure(11);
+plot(ppm_range(begin_index:end_index), abs(spec_loc_1pc_sos(begin_index:end_index)),'b', 'LineWidth', 2);
+legend('Magnitude');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Spectrum');
+
+%% 基线校正，多项式函数效果不太好，似乎并不需要校正（原因是太多峰了）
+% y = spec_loc_1pc_sos;
+% degree = 3;  % 三次多项式
+% coeff = polyfit(ppm_range, y, degree);
+% y_trend = polyval(coeff, ppm_range);
+% y_detrend = y - y_trend;
 % 
-% % 幅值相位
-% figure(10);
-% plot(ppm_range(begin_index:end_index), abs(spec_1pc_loc(begin_index:end_index)),'b', 'LineWidth', 2);hold on;
-% plot(ppm_range(begin_index:end_index), angle(spec_1pc_loc(begin_index:end_index)),'r', 'LineWidth', 2);hold off;
-% legend('Magnitude','Angle');
-% xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz @ Channel 1');
-% 
-% % 四通道平均
-% %spec_1pc_sos = sqrt(sum(abs(spec_1pc_loc).^2, 4)); % 四个通道的模几何平均
-% %size(spec_1pc_sos)
-% spec_1pc_loc_sos = sqrt(sum(abs(spec_1pc_loc).^2, 4)); % 图像中心的波谱
-% figure(11);
-% plot(ppm_range(begin_index:end_index), abs(spec_1pc_loc_sos(begin_index:end_index)),'b', 'LineWidth', 2);
-% legend('Magnitude');
-% xlabel('ppm');ylabel('Signal');title('1st Phase Corrected Spectrum of ^{31}P loc at f_{ref}=51.8959 MHz');
+% % van_matrix = [time_range'.^3, time_range'.^2, time_range', ones(N,1)]; %三阶多项式
+% % coeff = van_matrix \ y'; % 线性拟合
+% % y_detrend = y - van_matrix * coeff;
+% figure(12);
+% plot(ppm_range(begin_index:end_index), spec_loc_1pc_sos(begin_index:end_index),'b', 'LineWidth', 2);hold on;
+% plot(ppm_range(begin_index:end_index), y_trend(begin_index:end_index),'r', 'LineWidth', 2);hold on;
+% plot(ppm_range(begin_index:end_index), y_detrend(begin_index:end_index),'black', 'LineWidth', 2);hold off;
+% legend('Magnitude','Trend','Detrend');set(gca,'XDir','reverse');
+% xlabel('ppm');ylabel('Signal');title('Detrended 1st Phase Corrected Spectrum');
 
-%%
+%% 最小值法基线校正
+% y = spec_loc_1pc_sos;
+% y_trend = ones(N,1)*min(y);
+% y_detrend = y - y_trend;
+% spec_loc_1pc_sos_detrend = y_detrend;
+% figure(12);
+% plot(ppm_range(begin_index:end_index), spec_loc_1pc_sos(begin_index:end_index),'b', 'LineWidth', 2);hold on;
+% plot(ppm_range(begin_index:end_index), y_trend(begin_index:end_index),'r', 'LineWidth', 2);hold on;
+% plot(ppm_range(begin_index:end_index), y_detrend(begin_index:end_index),'black', 'LineWidth', 2);hold off;
+% legend('Magnitude','Trend','Detrend');set(gca,'XDir','reverse');
+% xlabel('ppm');ylabel('Signal');title('Detrended 1st Phase Corrected Spectrum');
+
+%% 分峰拟合
+spectrum = spec_loc_1pc_sos;
+% PCr
+PCr_ppm_range = [1,-1.79]; % [3,-3]
+[PCr_fitted, PCr_pars] = FitLorentzPeak(spectrum,PCr_ppm_range);
+
+% Pi
+Pi_ppm_range = [5.62,3.28]; % [5.62,3.28]
+[Pi_fitted, Pi_pars] = FitLorentzPeak(spectrum,Pi_ppm_range);
+
+% alphaATP
+alphaATP_ppm_range = [-7.1,-8.7]; % [-6,-9]
+[alphaATP_fitted, alphaATP_pars] = FitLorentzPeak(spectrum,alphaATP_ppm_range);
+
+% betaATP
+betaATP_ppm_range = [-14.5,-17.5]; % [-14.5,-17.5]
+[betaATP_fitted, betaATP_pars] = FitLorentzPeak(spectrum,betaATP_ppm_range);
+
+% gammaATP
+gammaATP_ppm_range = [-1.9,-5.5]; % [-2,-5]
+[gammaATP_fitted, gammaATP_pars] = FitLorentzPeak(spectrum,gammaATP_ppm_range);
+
+figure(13);
+plot(ppm_range, spec_loc_1pc_sos,'b', 'LineWidth', 2);hold on;
+plot(ppm_range,PCr_fitted,'r','LineWidth', 2);hold on;
+plot(ppm_range,Pi_fitted,'g','LineWidth', 2);hold on;
+plot(ppm_range,alphaATP_fitted,'c','LineWidth', 2);hold on;
+plot(ppm_range,betaATP_fitted,'m','LineWidth', 2);hold on;
+plot(ppm_range,gammaATP_fitted,'y','LineWidth', 2);hold off;
+legend('Magnitude','PCr','Pi','alphaATP','betaATP','gammaATP');set(gca,'XDir','reverse');
+xlabel('ppm');ylabel('Signal');title('Individual Peak Fitted');
 
 
 
@@ -281,60 +322,78 @@ size(testmat)
 
 
 
-%%
-% function f = mrs_entropy(x,spectrum)
-% % Entropy is defined as the normalized derivative of the NMR spectral data
-% % ARGS :
-% % x = phc0 and phc1
-% % spectrum = a spectrum before automatic first-order phase correction 
-% % RETURNS : 
-% % f = entropy value (Using the first derivative)
-% 
-%     %initial parameters
-%     stepsize=1; 
-%     func_type=1;
-% 
-%     %dephase
-%     L=length(spectrum);
-%     phc0=x(1);
-%     phc1=x(2);
-%     
-%     % linear phase
-%     n=length(spectrum);
-%     ph=(phc0+phc1.*(1:n)/n);
-%     
-%     spectrum=real(mrs_rephase(spectrum, ph));
-% 
-%     % Calculation of first derivatives 
-%     if (func_type == 1)
-%         ds1 = abs((spectrum(3:L)-spectrum(1:L-2))/(stepsize*2));
-%     else
-%         ds1 = ((spectrum(3:L)-spectrum(1:L-2))/(stepsize*2)).^2;
-%     end  
-%     p1 = ds1./sum(ds1);
-% 
-%     %Calculation of Entropy
-%     [M,K]=size(p1);
-%     for i=1:M
-%         for j=1:K
-%             if (p1(i,j)==0)%in case of ln(0)
-%                p1(i,j)=1; 
-%             end
-%         end
-%     end
-%     h1  = -p1.*log(p1);
-%     H1  = sum(h1);
-%     %Calculation of penalty
-%     Pfun	= 0.0;
-%     as      = spectrum - abs(spectrum);
-%     sumas   = sum(sum(as));
-%     if (sumas < 0)
-%        Pfun = Pfun + sum(sum((as./2).^2));
-%     end
-%     P = 1000*Pfun;
-% 
-%     % The value of objective function
-%     f = H1+P;
-% 
-% end
 
+%% 一阶相位校正部分的函数
+function f = mrs_entropy(x,spectrum)
+% Entropy is defined as the normalized derivative of the NMR spectral data
+% ARGS :
+% x = phc0 and phc1
+% spectrum = a spectrum before automatic first-order phase correction 
+% RETURNS : 
+% f = entropy value (Using the first derivative)
+
+    %initial parameters
+    stepsize=1; 
+    func_type=1;
+
+    %dephase
+    L=length(spectrum);
+    phc0=x(1);
+    phc1=x(2);
+    
+    % linear phase
+    n=length(spectrum);
+    ph=(phc0+phc1.*(1:n)/n);
+    
+    spectrum=real(mrs_rephase(spectrum, ph));
+
+    % Calculation of first derivatives 
+    if (func_type == 1)
+        ds1 = abs((spectrum(3:L)-spectrum(1:L-2))/(stepsize*2));
+    else
+        ds1 = ((spectrum(3:L)-spectrum(1:L-2))/(stepsize*2)).^2;
+    end  
+    p1 = ds1./sum(ds1);
+
+    %Calculation of Entropy
+    [M,K]=size(p1);
+    for i=1:M
+        for j=1:K
+            if (p1(i,j)==0)%in case of ln(0)
+               p1(i,j)=1; 
+            end
+        end
+    end
+    h1  = -p1.*log(p1);
+    H1  = sum(h1);
+    %Calculation of penalty
+    Pfun	= 0.0;
+    as      = spectrum - abs(spectrum);
+    sumas   = sum(sum(as));
+    if (sumas < 0)
+       Pfun = Pfun + sum(sum((as./2).^2));
+    end
+    P = 1000*Pfun;
+
+    % The value of objective function
+    f = H1+P;
+
+end
+
+%% 分峰拟合函数
+function [y_fitted, pars_fitted] = FitLorentzPeak(spectrum, ppm_range)
+    % pars_fitted: 
+        % y0 = baseline amplitude
+        % x0 = location of the peak 
+        % fwhm = full width at half maximum
+        % A = height of the peak 
+    N = length(spectrum);
+    freq_ref_P = 51.8959; BW_P = 5000;
+    index_range = round(-ppm_range *N*freq_ref_P/BW_P+N/2);
+    x = index_range(1):index_range(2);
+    data = spectrum(x);
+    [A_ini,index] = max(data);
+    par_initials=[(data(1)+data(end))/2, x(index), 2.5, A_ini]; 
+    [f, pars_fitted] = mrs_lorentzFit(par_initials, data, x');
+    y_fitted = mrs_lorentzFun(1:N, pars_fitted(1), pars_fitted(2), pars_fitted(3), pars_fitted(4));
+end
