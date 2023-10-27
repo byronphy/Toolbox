@@ -116,11 +116,17 @@ img_MIP = img_MIP/max(abs(img_MIP(:)));
 
 % 选择图像空间的某一个体素（选MIP图中最大的地方，理论上是PCr含量最大的地方）
 [~,tmpidx] = sort(img_MIP(:),'descend');
-Y_loc = ceil(tmpidx(1)/imgSize);
-X_loc = tmpidx(1)-(Y_loc-1)*imgSize;
 
-% X_loc = ceil(tmpidx(1)/imgSize);
-% Y_loc = tmpidx(1)-(X_loc-1)*imgSize;
+tmpidx_end = 10;
+Y_locs = ceil(tmpidx(1:tmpidx_end)/imgSize);
+X_locs = tmpidx(1:tmpidx_end)-(Y_locs-1)*imgSize;
+
+loc_point = 10; % 1 is the max
+Y_loc = Y_locs(loc_point);
+X_loc = X_locs(loc_point);
+
+% Y_loc = ceil(tmpidx(1)/imgSize);
+% X_loc = tmpidx(1)-(Y_loc-1)*imgSize;
 
 % X_loc = 24;
 % Y_loc = 21;
@@ -236,7 +242,6 @@ plot(ppm_range(begin_index:end_index), angle(spec_loc(begin_index:end_index,3)),
 plot(ppm_range(begin_index:end_index), angle(spec_loc(begin_index:end_index,4)),'m-', 'LineWidth', 1);hold on;
 legend('Channel 1','Channel 2','Channel 3','Channel 4');set(gca,'XDir','reverse');xlabel('ppm');ylabel('Phase (rad)');
 title('Phase Spectrum of ^{31}P');
-
 
 % Plot 联合通道
 figure(4);
@@ -405,15 +410,25 @@ plot(ppm_range(begin_index:end_index), spec_1oc_linearpc_sos12(begin_index:end_i
 legend('1-4','1-3','1-2');set(gca,'XDir','reverse');xlabel('ppm');ylabel('Signal');
 title('1st-order Phase-Corrected Magnitude Spectrum of ^{31}P (Combined Channel)');
 
+%%
+% % Plot 单通道实数谱
+% figure(8);
+% plot(ppm_range(begin_index:end_index), real(spec_1oc_linearpc(begin_index:end_index,1)),'b', 'LineWidth', 2);hold on;
+% plot(ppm_range(begin_index:end_index), real(spec_1oc_linearpc(begin_index:end_index,2)),'r', 'LineWidth', 2);hold on;
+% plot(ppm_range(begin_index:end_index), real(spec_1oc_linearpc(begin_index:end_index,3)),'g', 'LineWidth', 2);hold off;
+% %plot(ppm_range(begin_index:end_index), real(spec_1oc_linearpc(begin_index:end_index,4)),'m', 'LineWidth', 2);hold off;
+% legend('1','2','3','4');set(gca,'XDir','reverse');xlabel('ppm');ylabel('Signal');
+% title('1st-order Phase-Corrected Real Spectrum of ^{31}P');
+
 %% 基线校正，多项式函数效果不太好，似乎并不需要校正（原因是太多峰了，实际上可能是振铃伪影）
 y = spec_1oc_linearpc_sos;
+
 degree = 3;  % 三次多项式
 coeff = polyfit(ppm_range, y, degree);
 y_trend = polyval(coeff, ppm_range');
 y_detrend = y - y_trend;
 
-[y_min,min_index] = min(y_detrend);
-y_min_list = ones(size(y))*y_min;
+y_min = min(y_detrend);
 if y_min <0
     y_trend = y_trend + y_min;
     y_detrend = y_detrend - y_min;
@@ -436,19 +451,19 @@ PCr_ppm_range = [-1.41,2.16]; % [-3,3]
 
 % Pi
 Pi_ppm_range = [4.8,6.12]; % [3.29,4.24]
-[Pi_fitted, Pi_pars] = FitLorentzPeak(spectrum,Pi_ppm_range);
+[Pi_fitted, Pi_pars_map] = FitLorentzPeak(spectrum,Pi_ppm_range);
 
 % alphaATP
 alphaATP_ppm_range = [-8.2,-6.3]; % [-6,-9]
-[alphaATP_fitted, alphaATP_pars] = FitLorentzPeak(spectrum,alphaATP_ppm_range);
+[alphaATP_fitted, alphaATP_pars_map] = FitLorentzPeak(spectrum,alphaATP_ppm_range);
 
 % betaATP
 betaATP_ppm_range = [-17,-14.8]; % [-17.5,-14.5]
-[betaATP_fitted, betaATP_pars] = FitLorentzPeak(spectrum,betaATP_ppm_range);
+[betaATP_fitted, betaATP_pars_map] = FitLorentzPeak(spectrum,betaATP_ppm_range);
 
 % gammaATP
-gammaATP_ppm_range = [-2.54,-1.22]; % [-2.3,-1.79]
-[gammaATP_fitted, gammaATP_pars] = FitLorentzPeak(spectrum,gammaATP_ppm_range);
+gammaATP_ppm_range = [-4.99,-3.48]; 
+[gammaATP_fitted, gammaATP_pars_map] = FitLorentzPeak(spectrum,gammaATP_ppm_range);
 
 figure(14);
 plot(ppm_range, spectrum,'b', 'LineWidth', 2);hold on;
@@ -466,11 +481,154 @@ xlabel('ppm');ylabel('Signal');title('Individual Peak Fitted');
         % A = height of the peak 
 index_range = 1:N;
 %PCr_Area = PCr_pars(2)*PCr_pars(3)
-PCr_Area = trapz(index_range,PCr_fitted);
-Pi_Area = trapz(index_range,Pi_fitted);
-alphaATP_Area = trapz(index_range,alphaATP_fitted);
-betaATP_Area = trapz(index_range,betaATP_fitted);
-gammaATP_Area = trapz(index_range,gammaATP_fitted);
+%delta_index2ppm = BW_P/freq_ref_P/N;
+%PCr_Area = trapz(index_range,PCr_fitted)*delta_index2ppm;
+PCr_Area = trapz(ppm_range,PCr_fitted);
+PCr_ppm = ppm_range(round(PCr_pars(1)));
+
+Pi_Area = trapz(ppm_range,Pi_fitted);
+Pi_ppm = ppm_range(round(Pi_pars_map(1)));
+
+alphaATP_Area = trapz(ppm_range,alphaATP_fitted);
+alphaATP_ppm = ppm_range(round(alphaATP_pars_map(1)));
+
+betaATP_Area = trapz(ppm_range,betaATP_fitted);
+betaATP_ppm = ppm_range(round(betaATP_pars_map(1)));
+
+gammaATP_Area = trapz(ppm_range,gammaATP_fitted);
+gammaATP_ppm = ppm_range(round(gammaATP_pars_map(1)));
+
+%% 选择信噪比最高的几个点（共tmpidx_end个）对ATP进行定量，计算比例因子ratio
+% alphaATP_ppm_range = [-8.2,-6.3];
+% betaATP_ppm_range = [-17,-14.8]; 
+% gammaATP_ppm_range = [-4.99,-3.48]; 
+ratio_list = zeros(tmpidx_end,1);
+for loc_index = 1:tmpidx_end
+    X_tem = X_locs(loc_index);
+    Y_tem = Y_locs(loc_index);
+    alphaATP_area_tmp = cal_chem_area(spec,X_tem,Y_tem,alphaATP_ppm_range,ppm_range);
+    betaATP_area_tmp = cal_chem_area(spec,X_tem,Y_tem,betaATP_ppm_range,ppm_range);
+    gammaATP_area_tmp = cal_chem_area(spec,X_tem,Y_tem,gammaATP_ppm_range,ppm_range);
+    ATP_area_tmp = (alphaATP_area_tmp+betaATP_area_tmp+gammaATP_area_tmp)/3;
+    ratio_list(loc_index) = 8.2000/ATP_area_tmp;
+end
+ratio = mean(ratio_list);
+
+%% 定量计算
+% pH
+delta_Pi2PCr_ppm = Pi_ppm - PCr_ppm;
+pH = 6.75+log10((delta_Pi2PCr_ppm-3.27)/(5.63-delta_Pi2PCr_ppm));
+% PCr, Pi, alphaATP, betaATP, gammaATP
+PCr_co = PCr_Area*ratio;%mmol/L
+Pi_co = Pi_Area*ratio;%mmol/L
+alphaATP_co = alphaATP_Area*ratio;% mmol/L
+betaATP_co = betaATP_Area*ratio;% mmol/L
+gammaATP_co = gammaATP_Area*ratio;% mmol/L
+% ATP
+ATP_co = (alphaATP_co+betaATP_co+gammaATP_co)/3; % mmol/L
+% ADP
+Keq = 1.66*1e9;
+TCr_co = 42.5;%mmol/L
+H_co = 10^(-pH);%mmol/L
+ADP_co = ATP_co*(TCr_co-PCr_co)/Keq/PCr_co/H_co ;%mmol/L
+
+disp(['pH = ',num2str(roundn(pH,-3))]);
+disp(['c(H) = ',num2str(roundn(H_co,-3)),' mmol/L']);
+disp(['CS(PCr) = ',num2str(roundn(PCr_ppm,-3)),' ppm']);
+disp(['c(PCr) = ',num2str(roundn(PCr_co,-3)),' mmol/L']);
+disp(['CS(Pi) = ',num2str(roundn(Pi_ppm,-3)),' ppm']);
+disp(['c(Pi) = ',num2str(roundn(Pi_co,-3)),' mmol/L']);
+disp(['CS(alpha-ATP) = ',num2str(roundn(alphaATP_ppm,-3)),' ppm']);
+disp(['c(alpha-ATP) = ',num2str(roundn(alphaATP_co,-3)),' mmol/L']);
+disp(['CS(beta-ATP) = ',num2str(roundn(betaATP_ppm,-3)),' ppm']);
+disp(['c(beta-ATP) = ',num2str(roundn(betaATP_co,-3)),' mmol/L']);
+disp(['CS(gamma-ATP) = ',num2str(roundn(gammaATP_ppm,-3)),' ppm']);
+disp(['c(gamma-ATP) = ',num2str(roundn(gammaATP_co,-3)),' mmol/L']);
+disp(['c(ATP) = ',num2str(roundn(ATP_co,-3)),' mmol/L']);
+disp(['c(ADP) = ',num2str(roundn(ADP_co,-3)),' mmol/L']);
+
+
+% =============================================================================================================================
+%% 读取四核图像k空间
+[fidtemp_, SizeTD2, SizeTD1] = Getmulnuclei_UTE_P([FIDfile,num2str(fileIdx_P),'\prefid'],mreadH,spoke,4,2,avg,avg,mreadP,X,Y);
+fidtemp = mean(fidtemp_,5); % 128x128x4x3x2 --> 128x128x4x3
+%fidtemp = permute(fidtemp,[2,1,3,4]);
+fidtemp = fidtemp(end:-1:1,:,:,:);
+fidtemp = fidtemp/avg;
+
+img_HFNa = zeros(mreadH,mreadH,3);
+for idxNucl = 1:3
+    singleNucl = fidtemp(:,:,:,idxNucl);
+    nx = round(gamma(1)/gamma(idxNucl)*mreadH);
+    ny = round(gamma(1)/gamma(idxNucl)*spoke);
+    kspace4Recon = zeros(nx,ny,4);
+    img_singleNucl = zeros(nx,ny,4);
+    paddingx = round((nx-mreadH)/2);
+    paddingy = round((ny-spoke)/2);
+    kspace4Recon(paddingx+1:paddingx+mreadH,paddingy+1:paddingy+spoke,:) = singleNucl;
+    for i = 1:4 % nc
+        img_singleNucl(:,:,i) = ifftshift(ifft2(ifftshift(kspace4Recon(:,:,i))));
+    end
+    img_HFNa(:,:,idxNucl) = sqrt(sum(abs(img_singleNucl(paddingx+1:paddingx+mreadH,paddingy+1:paddingy+spoke,[1,2,3,4])).^2,3));
+end
+
+%% 多体素：P化学物质分布图
+PCr_ppm_range = [-2,2]; % [-1.41,2.16]
+Pi_ppm_range = [3.28,5.62]; % [4.8,6.12]
+alphaATP_ppm_range = [-9,-6];% [-8.2,-6.3]
+betaATP_ppm_range = [-17.5,-14.5]; %[-17,-14.8]
+gammaATP_ppm_range = [-5,-2]; % [-4.99,-3.48]
+% 
+% PCr_ppm_range = [-1.41,2.16]; % [-1.41,2.16]
+% Pi_ppm_range = [4.8,6.12]; % [4.8,6.12]
+% alphaATP_ppm_range = [-8.2,-6.3];% [-8.2,-6.3]
+% betaATP_ppm_range = [-17,-14.8]; %[-17,-14.8]
+% gammaATP_ppm_range = [-4.99,-3.48]; % [-4.99,-3.48]
+
+PCr_map = zeros(imgSize,imgSize);PCr_pars_map = zeros(imgSize,imgSize,3);
+Pi_map = zeros(imgSize,imgSize);Pi_pars_map = zeros(imgSize,imgSize,3);
+alphaATP_map = zeros(imgSize,imgSize);alphaATP_pars_map = zeros(imgSize,imgSize,3);
+betaATP_map = zeros(imgSize,imgSize);betaATP_pars_map = zeros(imgSize,imgSize,3);
+gammaATP_map = zeros(imgSize,imgSize);gammaATP_pars_map = zeros(imgSize,imgSize,3);
+for j = 1:imgSize
+    for i = 1:imgSize
+        PCr_map(i,j) = abs(cal_chem_area(spec,i,j,PCr_ppm_range,ppm_range))*ratio;
+    end
+end
+%%
+PCr_map(PCr_map>50)=0;
+PCr_map = imresize(PCr_map,[128,128]);
+% Pi_map(Pi_map>10)=0;
+% Pi_map = imresize(Pi_map,[128,128]);
+% alphaATP_map(alphaATP_map>50)=0;
+% alphaATP_map = imresize(alphaATP_map,[128,128]);
+% betaATP_map(betaATP_map>50)=0;
+% betaATP_map = imresize(betaATP_map,[128,128]);
+% gammaATP_map(gammaATP_map>50)=0;
+% gammaATP_map = imresize(gammaATP_map,[128,128]);
+% 
+% delta_Pi2PCr_ppm_map = Pi_pars_map(:,:,1) - PCr_pars_map(:,:,1);
+% pH_maps = 6.75+log10((delta_Pi2PCr_ppm_map-3.27)/(5.63-delta_Pi2PCr_ppm_map));
+
+figure(15);
+imshow(PCr_map,[]);
+colormap(hot);colorbar;
+title('PCr Map (mmol/L)');
+
+%%
+c1 = linspace(0,0.9769,255);c2 = linspace(0,0.9839,255);c3 = linspace(0,0.0805,255);
+color_H = [c1',c2',c3'];
+c1 = linspace(0,1,255);c2 = linspace(0,0,255);c3 = linspace(0,0,255);
+color_F = [c1',c2',c3'];
+c1 = linspace(0,0,255);c2 = linspace(0,1,255);c3 = linspace(0,1,255);
+color_Na = [c1',c2',c3'];
+c1 = linspace(0,1,255);c2 = linspace(0,0.5391,255);c3 = linspace(0,0,255);
+color_P = [c1',c2',c3'];
+
+H_img = img_HFNa(:,:,1);
+
+figure;
+imshow(H_img,[]);colormap(gray);title('H')
 
 
 
@@ -483,6 +641,10 @@ gammaATP_Area = trapz(index_range,gammaATP_fitted);
 
 
 
+
+
+
+%===========Functions==========================================================================================================
 %% 对sos幅度谱的频率轴平移校正
 function spec_sos_shifted = spec_shift(spec_sos,shift_value)
     spec_sos_shifted = zeros(size(spec_sos,1),size(spec_sos,2),size(spec_sos,3));
@@ -494,6 +656,7 @@ function spec_sos_shifted = spec_shift(spec_sos,shift_value)
     end
 end
 
+
 %% 一阶相位校正部分的函数
 function f = mrs_entropy(x,spectrum)
 % Entropy is defined as the normalized derivative of the NMR spectral data
@@ -502,22 +665,17 @@ function f = mrs_entropy(x,spectrum)
 % spectrum = a spectrum before automatic first-order phase correction 
 % RETURNS : 
 % f = entropy value (Using the first derivative)
-
     %initial parameters
     stepsize=1; 
     func_type=1;
-
     %dephase
     L=length(spectrum);
     phc0=x(1);
     phc1=x(2);
-    
     % linear phase
     n=length(spectrum);
     ph=(phc0+phc1.*(1:n)/n);
-    
     spectrum=real(mrs_rephase(spectrum, ph));
-
     % Calculation of first derivatives 
     if (func_type == 1)
         ds1 = abs((spectrum(3:L)-spectrum(1:L-2))/(stepsize*2));
@@ -525,7 +683,6 @@ function f = mrs_entropy(x,spectrum)
         ds1 = ((spectrum(3:L)-spectrum(1:L-2))/(stepsize*2)).^2;
     end  
     p1 = ds1./sum(ds1);
-
     %Calculation of Entropy
     [M,K]=size(p1);
     for i=1:M
@@ -545,16 +702,22 @@ function f = mrs_entropy(x,spectrum)
        Pfun = Pfun + sum(sum((as./2).^2));
     end
     P = 1000*Pfun;
-
     % The value of objective function
     f = H1+P;
+end
 
+
+function spectra_ph = mrs_rephase(spectra, ph)
+    re=real(spectra);
+    im=imag(spectra);
+    re_new=re.*cos(ph)-im.*sin(ph);
+    im_new=re.*sin(ph)+im.*cos(ph);
+    spectra_ph=re_new+1i*im_new;
 end
 
 %% 分峰拟合函数
 function [y_fitted, pars_fitted] = FitLorentzPeak(spectrum, ppm_range)
     % pars_fitted: 
-        % y0 = baseline amplitude
         % x0 = location of the peak 
         % fwhm = full width at half maximum
         % A = height of the peak 
@@ -564,21 +727,23 @@ function [y_fitted, pars_fitted] = FitLorentzPeak(spectrum, ppm_range)
     x = index_range(1):index_range(2);
     data = spectrum(x);
     [A_ini,index] = max(data);
-    %par_initials=[(data(1)+data(end))/2, x(index), 2.5, A_ini]; 
     par_initials=[x(index), 2.5, A_ini]; 
-    [f, pars_fitted] = lorentzFit(par_initials, data, x');
-    %y_fitted = mrs_lorentzFun(1:N, pars_fitted(1), pars_fitted(2), pars_fitted(3), pars_fitted(4));
+    [~, pars_fitted] = lorentzFit(par_initials, data, x');
     y_fitted = lorentzFun(1:N, pars_fitted(1), pars_fitted(2), pars_fitted(3));
 end
 
+%% 洛伦兹拟合
 function  [y_fitted, pars_fitted]= lorentzFit(pars0, data, x)
+
     %options = optimset('TolX',1e-8,'MaxFunEvals',1e8, 'MaxIter',1e8);
-    options = optimset('TolX',1e-8,'MaxFunEvals',1e8, 'MaxIter',10000);
-    %[pars_fitted, ~] = fminsearch(@(pars) se_fun(pars, data, x), pars0,options);
-    %y_fitted = mrs_lorentzFun(x, pars_fitted(1), pars_fitted(2), pars_fitted(3), pars_fitted(4));
-    [pars_fitted, ~] = fminsearch(@(pars) error_fun(pars, data, x), pars0,options);
+    options = optimset('TolX',1e-8,'MaxFunEvals',1e8, 'MaxIter',1e3);
+    [pars_fitted, ~, exitflag] = fminsearch(@(pars) error_fun(pars, data, x), pars0,options);
     y_fitted = lorentzFun(x, pars_fitted(1), pars_fitted(2), pars_fitted(3));
+    if exitflag ~= 1 % 拟合失败
+        pars_fitted = [0,1,0];
+    end
 end
+
 
 function se = error_fun(pars,data, x)
 % SE_FUN defines the objective function to be minimised 
@@ -595,8 +760,36 @@ function se = error_fun(pars,data, x)
     se = sum((est_peak-data).^2);
 end
 
+
 function y = lorentzFun(x, x0, fwhm, A)
      m=(x-x0)*2./fwhm;
      y= A.*(1./(1+m.^2));
 end
 
+
+%% 计算化学物质面积（根据幅度谱，无相位校正）
+function chem_area=cal_chem_area(data_spec,data_X,data_Y,chem_ppm_range,ppm_range)
+    data_spec_loc = squeeze(data_spec(:,data_X,data_Y,:));
+    % 联合通道
+    smooth_width = 4;
+    data_spec_loc_sos = sqrt(sum(abs(data_spec_loc).^2, 2));% 前4个通道模平方和的开方,512x32x32
+    data_spec_loc_sos = smooth(data_spec_loc_sos,smooth_width,'lowess'); % 平滑处理，窗宽4
+    % 基线校正
+    degree = 3;  % 三次多项式
+    coeff = polyfit(ppm_range, data_spec_loc_sos, degree);
+    y_trend = polyval(coeff, ppm_range');
+    y_detrend = data_spec_loc_sos - y_trend;
+    y_min = min(y_detrend);
+    if y_min <0
+        y_detrend = y_detrend - y_min;
+    end
+    spectrum_area = y_detrend;
+    % chemical
+    [chem_fitted, chem_pars] = FitLorentzPeak(spectrum_area, chem_ppm_range);
+    %chem_area = trapz(ppm_range,chem_fitted);
+    if chem_pars(3) > 0   %&& ppm_range(round(chem_pars(1)))>chem_ppm_range(1) && ppm_range(round(chem_pars(1)))<chem_ppm_range(end)
+        chem_area = trapz(ppm_range,chem_fitted);
+    else
+        chem_area = 0;
+    end
+end
